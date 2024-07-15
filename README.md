@@ -1,6 +1,6 @@
 # .sub, .wav, .iq, .bin to .c16 Converter for HackRF PortaPack (not tested on my own portapack just yet, but files convert successfully)
 
-Made by RockGod, fixed by "me" (gpt 4O). This project contains a Python script that helps convert .sub files (Flipper SubGhz RAW File) to .c16 files for use with HackRF PortaPack. This project is a fork from broken code and has been fixed and improved. I fixed this using chatgpt, I know nothing. Supports two protocols: RAW and BinRAW.
+Made by RockGod, fixed by "me" (gpt 4O). This project contains a Python script that helps convert .sub (and possibily .wav, .iq, .bin)  files (Flipper SubGhz RAW File) to .c16 files for use with HackRF PortaPack. This project is a fork from broken code and has been fixed and improved. I fixed this using chatgpt, I know nothing. Supports two protocols: RAW and BinRAW.
 
 ## What You Need
 
