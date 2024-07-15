@@ -1,4 +1,4 @@
-# .sub to .c16 Converter for HackRF PortaPack (not tested on my own portapack just yet, but files convert successfully)
+# .sub, .wav, .iq, .bin to .c16 Converter for HackRF PortaPack (not tested on my own portapack just yet, but files convert successfully)
 
 Made by RockGod, fixed by "me" (gpt 4O). This project contains a Python script that helps convert .sub files (Flipper SubGhz RAW File) to .c16 files for use with HackRF PortaPack. This project is a fork from broken code and has been fixed and improved. I fixed this using chatgpt, I know nothing. Supports two protocols: RAW and BinRAW.
 
@@ -23,8 +23,10 @@ pip install numpy
 This command installs NumPy for Python.
 
 ### How to Use the Script
+
 Step 1: Get Your Files Ready
-Make sure you have a file that ends with .sub. This is the file you want to convert.
+
+Make sure you have files in one of the supported formats: .sub, .wav, .iq, or .bin. These are the files you want to convert.
 
 ### How To Run the Script
 Open the command prompt or terminal on your computer.
@@ -37,9 +39,35 @@ cd C:\Users\YourName\Documents
 Now, run the script with the following command:
 
 ```sh
-python sdr_converter.py your_signal.sub -o output_file -sr 500000 -if 5000 -a 100 -v
+python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
 ```
-## What the Command Does
+## Important Parameters
+
+### Automatic Parameter Detection:
+
+Use the --auto flag to automatically detect and suggest appropriate parameters.
+
+Example:
+```sh
+python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
+```
+### Manual Parameters:
+
+Sample Rate (-sr): Sets the sample rate to a specific value.
+```sh
+python sdr_converter.py "input_file.sub" -o "output_file" -sr 500000
+```
+Intermediate Frequency (-if): Sets the intermediate frequency.
+```sh
+python sdr_converter.py "input_file.sub" -o "output_file" -if 5000
+```
+
+Amplitude (-a): Sets the amplitude percentage.
+```sh
+python sdr_converter.py "input_file.sub" -o "output_file" -a 100
+```
+
+## What the Commands Do
 python sdr_converter.py runs the script.
 
 your_signal.sub is the name of the file you want to convert.
@@ -53,6 +81,8 @@ your_signal.sub is the name of the file you want to convert.
 -a 100 sets the amplitude to 100%.
 
 -v enables verbose mode, which means the script will tell you what it's doing step by step.
+
+--auto enables automatic parameter detection
 
 ### Step 3: Check the New Files
 After you run the command, the script creates two new files:
@@ -79,22 +109,30 @@ Ensure that folder names with spaces are enclosed in quotes ("input folder").
 
 If the output folder is not specified, the converted files will be saved in the same location as the input files with the default naming convention.
 
-### Example
+### Example Commands
 Here's an example of how to run the script:
 
-Single File
-```sh
-python sdr_converter.py my_signal.sub -o my_output -sr 500000 -if 5000 -a 100 -v
-```
-This converts my_signal.sub to my_output.c16 and my_output.txt.
+Single File with Automatic Detection:
 
-Bulk/Multiple Files:
 ```sh
-python sdr_converter.py "input folder" -o "output folder" -sr 500000 -if 5000 -a 100 -v
+python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
 ```
-Folder Names with Spaces:
 
-Ensure that folder names with spaces are enclosed in quotes ("input folder").
+Folder of Files with Automatic Detection:
+
+```sh
+python sdr_converter.py "input_folder" -o "output_folder" --auto -v
+```
+
+Single File with Manual Parameters:
+
+```sh
+python sdr_converter.py "input_file.sub" -o "output_file" -sr 500000 
+```
+
+#### File Names with Spaces:
+
+Ensure that file names with spaces are enclosed in quotes ("input folder").
 
 ### Extra Info
 
