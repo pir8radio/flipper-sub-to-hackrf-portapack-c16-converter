@@ -4,6 +4,7 @@ import math
 from typing import List, Tuple
 import struct
 import numpy as np
+import wave
 
 def str2abbr(str_: str = '') -> str:
     return ''.join(word[0] for word in str_.split('_'))
@@ -43,6 +44,46 @@ def parse_sub(file: str) -> dict:
 
     return info
 
+def parse_wav(file: str) -> dict:
+    try:
+        with wave.open(file, 'r') as wf:
+            params = wf.getparams()
+            framerate = params.framerate
+            nframes = params.nframes
+            audio_data = wf.readframes(nframes)
+            info = {
+                'sampling_rate': framerate,
+                'chunks': np.frombuffer(audio_data, dtype=np.int16).tolist()
+            }
+            return info
+    except Exception as e:
+        print(f'Cannot read WAV file: {e}')
+        exit(-1)
+
+def parse_iq(file: str) -> dict:
+    try:
+        with open(file, 'rb') as f:
+            iq_data = f.read()
+            info = {
+                'chunks': np.frombuffer(iq_data, dtype=np.int16).tolist()
+            }
+            return info
+    except Exception as e:
+        print(f'Cannot read IQ file: {e}')
+        exit(-1)
+
+def parse_bin(file: str) -> dict:
+    try:
+        with open(file, 'rb') as f:
+            bin_data = f.read()
+            info = {
+                'chunks': np.frombuffer(bin_data, dtype=np.uint8).tolist()
+            }
+            return info
+    except Exception as e:
+        print(f'Cannot read BIN file: {e}')
+        exit(-1)
+
 def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
     paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
     with open(paths[0], 'wb') as f:
@@ -57,11 +98,10 @@ def generate_meta_string(frequency: str, sampling_rate: str) -> str:
 
 HACKRF_OFFSET = 0
 
-def durations_to_bin_sequence(durations: List[List[int]], sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
+def durations_to_bin_sequence(durations: List[int], sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
     sequence = []
-    for chunk in durations:
-        for duration in chunk:
-            sequence.extend(us_to_sin(duration > 0, abs(duration), sampling_rate, intermediate_freq, amplitude))
+    for duration in durations:
+        sequence.extend(us_to_sin(duration > 0, abs(duration), sampling_rate, intermediate_freq, amplitude))
     return sequence
 
 def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
@@ -84,33 +124,51 @@ def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq:
 def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
     return np.array(sequence).astype(np.int16).tobytes()
 
+def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
+    # Placeholder function for automatic parameter detection
+    # This should analyze the file and return sensible defaults for sampling_rate, intermediate_freq, and amplitude
+    # For now, we'll use fixed values
+    return (500000, 5000, 100)
+
 def parse_args() -> dict:
     parser = argparse.ArgumentParser(description="SDR-based file processing script")
     parser.add_argument('file', help="Input file path or folder.")
     parser.add_argument('-o', '--output', help="Output file or folder path. If not specified, the input file name will be used.")
-    parser.add_argument('-sr', '--sampling_rate', type=int, default=500000, help="Sampling rate for the output file. Default is 500ks/s.")
-    parser.add_argument('-if', '--intermediate_freq', type=int, default=None, help="Intermediate frequency.")
-    parser.add_argument('-a', '--amplitude', type=int, default=100, help="Amplitude percentage. Default is 100.")
+    parser.add_argument('-sr', '--sampling_rate', type=int, help="Sampling rate for the output file.")
+    parser.add_argument('-if', '--intermediate_freq', type=int, help="Intermediate frequency.")
+    parser.add_argument('-a', '--amplitude', type=int, help="Amplitude percentage.")
+    parser.add_argument('--auto', action='store_true', help='Automatically detect parameters.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
     return vars(parser.parse_args())
 
 def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: int, amplitude: int, verbose: bool):
     if verbose:
         print(f'Parsing file: {file}')
-
-    info = parse_sub(file)
+    
+    file_ext = os.path.splitext(file)[1].lower()
+    if file_ext == '.sub':
+        info = parse_sub(file)
+    elif file_ext == '.wav':
+        info = parse_wav(file)
+    elif file_ext == '.iq':
+        info = parse_iq(file)
+    elif file_ext == '.bin':
+        info = parse_bin(file)
+    else:
+        print(f'Unsupported file format: {file_ext}')
+        exit(-1)
 
     if verbose:
-        print(f'Sub File information: {info}')
+        print(f'File information: {info}')
 
-    chunks = info.get('chunks', [])
+    chunks = [item for sublist in info.get('chunks', []) for item in sublist]  # Flatten the list of chunks
 
     if verbose:
         print(f'Found {len(chunks)} pure data chunks')
 
     IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
     buff = sequence_to_16le_buffer(IQSequence)
-    outFiles = write_hrf_file(output, buff, info['frequency'], sampling_rate)
+    outFiles = write_hrf_file(output, buff, info.get('frequency', 'unknown'), sampling_rate)
 
     if verbose:
         print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
@@ -120,10 +178,18 @@ def main():
 
     file = args.get('file')
     output = args.get('output')
-    sampling_rate = args.get('sampling_rate', 500000)
-    intermediate_freq = args.get('intermediate_freq') or sampling_rate // 100
-    amplitude = args.get('amplitude', 100)
+    sampling_rate = args.get('sampling_rate')
+    intermediate_freq = args.get('intermediate_freq')
+    amplitude = args.get('amplitude')
+    auto = args.get('auto')
     verbose = args.get('verbose', False)
+
+    if auto:
+        sampling_rate, intermediate_freq, amplitude = auto_detect_parameters(file)
+    else:
+        sampling_rate = sampling_rate or 500000
+        intermediate_freq = intermediate_freq or sampling_rate // 100
+        amplitude = amplitude or 100
 
     current_dir = os.getcwd()
     file = os.path.join(current_dir, file)
@@ -131,7 +197,7 @@ def main():
         output = os.path.join(current_dir, output)
 
     if os.path.isdir(file):
-        sub_files = [f for f in os.listdir(file) if f.endswith('.sub')]
+        sub_files = [f for f in os.listdir(file) if f.endswith(('.sub', '.wav', '.iq', '.bin'))]
         total_files = len(sub_files)
         if not os.path.exists(output):
             os.makedirs(output)
