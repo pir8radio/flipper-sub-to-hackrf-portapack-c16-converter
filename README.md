@@ -77,7 +77,7 @@ Intermediate Frequency: This helps adjust the signal.
 
 Amplitude: This tells how strong the signal is.
 
-It seems to struggle with large .sub files such as [CVS_Chaos](https://github.com/jimilinuxguy/customer-assistance-buttons-sdr/blob/main/cvs/flipper_zero/CVS_Chaos.sub) 
+Remove any comments from the top of the .sub files, such as "# generated with ook_to_sub.py", it will not see the protocol. Can handle large .sub files such as [CVS Chaos](https://github.com/jimilinuxguy/customer-assistance-buttons-sdr/blob/main/cvs/flipper_zero/CVS_Chaos.sub#L3C18-L3C28)
 
 ### License
 This project is free to use and is licensed under the MIT License.
