@@ -77,6 +77,8 @@ Intermediate Frequency: This helps adjust the signal.
 
 Amplitude: This tells how strong the signal is.
 
+It seems to struggle with large .sub files such as [CVS_Chaos](https://github.com/jimilinuxguy/customer-assistance-buttons-sdr/blob/main/cvs/flipper_zero/CVS_Chaos.sub) 
+
 ### License
 This project is free to use and is licensed under the MIT License.
 
