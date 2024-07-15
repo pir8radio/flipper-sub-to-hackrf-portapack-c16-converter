@@ -8,49 +8,54 @@ import numpy as np
 def str2abbr(str_: str = '') -> str:
     return ''.join(word[0] for word in str_.split('_'))
 
-SUPPORTED_PROTOCOLS = ['RAW']
+SUPPORTED_PROTOCOLS = ['RAW', 'BinRAW']
 
-def parse_Sub(file: str) -> dict:
+def parse_sub(file: str) -> dict:
     try:
         with open(file, 'r') as f:
-          sub_data = f.read()
-    except:
-        print('Cannot read input file')
+            sub_data = f.read()
+    except Exception as e:
+        print(f'Cannot read input file: {e}')
         exit(-1)
 
     sub_chunks = [r.strip() for r in sub_data.split('\n')]
-    info = {k.lower(): v.strip() for k, v in (row.split(':') for row in sub_chunks[:5])}
-
-    print(f'Read info from file: {info}')
+    info = {}
+    for row in sub_chunks[:5]:
+        if ':' in row:
+            k, v = row.split(':', 1)
+            info[k.lower()] = v.strip()
 
     if info.get('protocol') not in SUPPORTED_PROTOCOLS:
-        print(f'Failed to parse {file}: Currently supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
+        print(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
         exit(-1)
 
-    info['chunks'] = [
-        list(map(int, r.split(':')[1].split()))
-        for r in sub_chunks[5:]
-        if ':' in r
-    ]
+    info['chunks'] = []
+    for r in sub_chunks[5:]:
+        if ':' in r:
+            _, values = r.split(':', 1)
+            chunk = []
+            for value in values.split():
+                try:
+                    chunk.append(int(value, 10))  # Try to parse as decimal
+                except ValueError:
+                    chunk.append(int(value, 16))  # If decimal parsing fails, parse as hexadecimal
+            info['chunks'].append(chunk)
 
     return info
 
-def write_HRF_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
-    PATHS = [f'{file}.{ext}' for ext in ['C16', 'TXT']]
-    with open(PATHS[0], 'wb') as f:
-        for chunk in buffer:
-            f.write(bytes(chunk))
-    with open(PATHS[1], 'w') as f:
+def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
+    paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
+    with open(paths[0], 'wb') as f:
+        f.write(buffer)
+    with open(paths[1], 'w') as f:
         f.write(generate_meta_string(frequency, sampling_rate))
-    return PATHS
+    return paths
 
 def generate_meta_string(frequency: str, sampling_rate: str) -> str:
     meta = [['sample_rate', sampling_rate], ['center_frequency', frequency]]
     return '\n'.join('='.join(map(str, r)) for r in meta)
 
 HACKRF_OFFSET = 0
-
-import numpy as np
 
 def durations_to_bin_sequence(durations: List[List[int]], sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
     sequence = []
@@ -60,24 +65,23 @@ def durations_to_bin_sequence(durations: List[List[int]], sampling_rate: int, in
     return sequence
 
 def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
-    ITERATIONS = int(sampling_rate * duration / 1_000_000)
-    if ITERATIONS == 0:
+    iterations = int(sampling_rate * duration / 1_000_000)
+    if iterations == 0:
         return []
 
-    DATA_STEP_PER_SAMPLE = 2 * math.pi * intermediate_freq / sampling_rate
-
-    HACKRF_AMPLITUDE = (256 ** 2 - 1) * (amplitude / 100)
+    data_step_per_sample = 2 * math.pi * intermediate_freq / sampling_rate
+    hackrf_amplitude = (256 ** 2 - 1) * (amplitude / 100)
 
     return [
         (
-            HACKRF_OFFSET + int(math.floor(math.cos(i * DATA_STEP_PER_SAMPLE) * (HACKRF_AMPLITUDE / 2))),
-            HACKRF_OFFSET + int(math.floor(math.sin(i * DATA_STEP_PER_SAMPLE) * (HACKRF_AMPLITUDE / 2)))
+            HACKRF_OFFSET + int(math.floor(math.cos(i * data_step_per_sample) * (hackrf_amplitude / 2))),
+            HACKRF_OFFSET + int(math.floor(math.sin(i * data_step_per_sample) * (hackrf_amplitude / 2)))
         )
         if level else (HACKRF_OFFSET, HACKRF_OFFSET)
-        for i in range(ITERATIONS)
+        for i in range(iterations)
     ]
 
-def sequence_to_16LEBuffer(sequence: List[Tuple[int, int]]) -> bytes:
+def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
     return np.array(sequence).astype(np.int16).tobytes()
 
 def parse_args() -> dict:
@@ -88,27 +92,46 @@ def parse_args() -> dict:
     parser.add_argument('-if', '--intermediate_freq', type=int, default=None, help="Intermediate frequency.")
     parser.add_argument('-a', '--amplitude', type=int, default=100, help="Amplitude percentage. Default is 100.")
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
-    return vars(parser.parse_args())
+    
+    try:
+        args = parser.parse_args()
+        if args.verbose:
+            print(f'Parsed arguments: {vars(args)}')
+        return vars(args)
+    except SystemExit as e:
+        print(f'Error parsing arguments: {e}')
+        parser.print_help()
+        exit(2)
 
-args = parse_args()
+def main():
+    args = parse_args()
 
-file = args.get('file')
-if args.get('output') == None:
-    t = file.replace('.sub', '')
-    output = args.get('t', os.path.splitext(file)[0])
-else:
-    output = args.get('output', os.path.splitext(file)[0])
-sampling_rate = args.get('sampling_rate', 500000)
-intermediate_freq = args.get('intermediate_freq') or sampling_rate // 100
-amplitude = args.get('amplitude', 100)
+    file = args.get('file')
+    output = args.get('output') or os.path.splitext(file)[0]
+    sampling_rate = args.get('sampling_rate', 500000)
+    intermediate_freq = args.get('intermediate_freq') or sampling_rate // 100
+    amplitude = args.get('amplitude', 100)
+    verbose = args.get('verbose', False)
 
-info = parse_Sub(file)
-print(f'Sub File information: {info}')
+    if verbose:
+        print(f'Parsing file: {file}')
+        
+    info = parse_sub(file)
+    
+    if verbose:
+        print(f'Sub File information: {info}')
+    
+    chunks = info.get('chunks', [])
+    
+    if verbose:
+        print(f'Found {len(chunks)} pure data chunks')
+    
+    IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
+    buff = sequence_to_16le_buffer(IQSequence)
+    outFiles = write_hrf_file(output, buff, info['frequency'], sampling_rate)
+    
+    if verbose:
+        print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
 
-chunks = info.get('chunks', [])
-print(f'Found {len(chunks)} pure data chunks')
-
-IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
-buff = sequence_to_16LEBuffer(IQSequence)
-outFiles = write_HRF_file(output, buff, info['frequency'], sampling_rate)
-print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
+if __name__ == "__main__":
+    main()
