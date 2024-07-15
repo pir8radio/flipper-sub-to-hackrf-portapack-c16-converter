@@ -61,13 +61,40 @@ After you run the command, the script creates two new files:
 
 ##### output_file.txt: This file has extra information like the sample rate and frequency.
 
-Example
+### Run the Script with a Folder:
+
+To process all .sub files in a folder, use the following command format:
+
+```sh
+python sdr_converter.py "input folder" -o "output folder" -sr 500000 -if 5000 -a 100 -v
+```
+
+## Important Notes
+
+Folder Names with Spaces:
+
+Ensure that folder names with spaces are enclosed in quotes ("input folder").
+
+## Default Output:
+
+If the output folder is not specified, the converted files will be saved in the same location as the input files with the default naming convention.
+
+### Example
 Here's an example of how to run the script:
 
+Single File
 ```sh
 python sdr_converter.py my_signal.sub -o my_output -sr 500000 -if 5000 -a 100 -v
 ```
 This converts my_signal.sub to my_output.c16 and my_output.txt.
+
+Bulk/Multiple Files:
+```sh
+python sdr_converter.py "input folder" -o "output folder" -sr 500000 -if 5000 -a 100 -v
+```
+Folder Names with Spaces:
+
+Ensure that folder names with spaces are enclosed in quotes ("input folder").
 
 ### Extra Info
 
