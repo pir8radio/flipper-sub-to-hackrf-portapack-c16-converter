@@ -91,14 +91,6 @@ After you run the command, the script creates two new files:
 
 ##### output_file.txt: This file has extra information like the sample rate and frequency.
 
-### Run the Script with a Folder:
-
-To process all .sub files in a folder, use the following command format:
-
-```sh
-python sdr_converter.py "input folder" -o "output folder" -sr 500000 -if 5000 -a 100 -v
-```
-
 ## Important Notes
 
 Folder Names with Spaces:
