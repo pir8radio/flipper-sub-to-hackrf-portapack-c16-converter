@@ -86,52 +86,63 @@ def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
 
 def parse_args() -> dict:
     parser = argparse.ArgumentParser(description="SDR-based file processing script")
-    parser.add_argument('file', help="Input file path.")
-    parser.add_argument('-o', '--output', help="Output file path. If not specified, the input file name will be used.")
+    parser.add_argument('file', help="Input file path or folder.")
+    parser.add_argument('-o', '--output', help="Output file or folder path. If not specified, the input file name will be used.")
     parser.add_argument('-sr', '--sampling_rate', type=int, default=500000, help="Sampling rate for the output file. Default is 500ks/s.")
     parser.add_argument('-if', '--intermediate_freq', type=int, default=None, help="Intermediate frequency.")
     parser.add_argument('-a', '--amplitude', type=int, default=100, help="Amplitude percentage. Default is 100.")
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
-    
-    try:
-        args = parser.parse_args()
-        if args.verbose:
-            print(f'Parsed arguments: {vars(args)}')
-        return vars(args)
-    except SystemExit as e:
-        print(f'Error parsing arguments: {e}')
-        parser.print_help()
-        exit(2)
+    return vars(parser.parse_args())
+
+def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: int, amplitude: int, verbose: bool):
+    if verbose:
+        print(f'Parsing file: {file}')
+
+    info = parse_sub(file)
+
+    if verbose:
+        print(f'Sub File information: {info}')
+
+    chunks = info.get('chunks', [])
+
+    if verbose:
+        print(f'Found {len(chunks)} pure data chunks')
+
+    IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
+    buff = sequence_to_16le_buffer(IQSequence)
+    outFiles = write_hrf_file(output, buff, info['frequency'], sampling_rate)
+
+    if verbose:
+        print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
 
 def main():
     args = parse_args()
 
     file = args.get('file')
-    output = args.get('output') or os.path.splitext(file)[0]
+    output = args.get('output')
     sampling_rate = args.get('sampling_rate', 500000)
     intermediate_freq = args.get('intermediate_freq') or sampling_rate // 100
     amplitude = args.get('amplitude', 100)
     verbose = args.get('verbose', False)
 
-    if verbose:
-        print(f'Parsing file: {file}')
-        
-    info = parse_sub(file)
-    
-    if verbose:
-        print(f'Sub File information: {info}')
-    
-    chunks = info.get('chunks', [])
-    
-    if verbose:
-        print(f'Found {len(chunks)} pure data chunks')
-    
-    IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
-    buff = sequence_to_16le_buffer(IQSequence)
-    outFiles = write_hrf_file(output, buff, info['frequency'], sampling_rate)
-    
-    if verbose:
-        print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
+    current_dir = os.getcwd()
+    file = os.path.join(current_dir, file)
+    if output:
+        output = os.path.join(current_dir, output)
+
+    if os.path.isdir(file):
+        sub_files = [f for f in os.listdir(file) if f.endswith('.sub')]
+        total_files = len(sub_files)
+        if not os.path.exists(output):
+            os.makedirs(output)
+        for sub_file in sub_files:
+            input_path = os.path.join(file, sub_file)
+            output_path = os.path.join(output, os.path.splitext(sub_file)[0])
+            process_file(input_path, output_path, sampling_rate, intermediate_freq, amplitude, verbose)
+    else:
+        if output is None:
+            output = os.path.splitext(file)[0]
+        process_file(file, output, sampling_rate, intermediate_freq, amplitude, verbose)
 
 if __name__ == "__main__":
     main()
