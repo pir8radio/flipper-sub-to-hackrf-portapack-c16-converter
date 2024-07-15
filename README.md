@@ -24,7 +24,7 @@ This command installs NumPy for Python.
 
 ### How to Use the Script
 
-Step 1: Get Your Files Ready
+Get Your Files Ready
 
 Make sure you have files in one of the supported formats: .sub, .wav, .iq, or .bin. These are the files you want to convert.
 
@@ -84,7 +84,7 @@ your_signal.sub is the name of the file you want to convert.
 
 --auto enables automatic parameter detection
 
-### Step 3: Check the New Files
+### Check the New Files
 After you run the command, the script creates two new files:
 
 ##### output_file.c16: This is the main file you need.
