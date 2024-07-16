@@ -140,18 +140,28 @@ def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
     default_intermediate_freq = 5000
     default_amplitude = 100
 
+    logging.info(f"Auto-detecting parameters for file: {file}")
+    
     if file_ext == '.sub':
-        info = parse_sub(file)
-        frequency = int(info.get('frequency', '418000000'))  # Example frequency in Hz
-        sampling_rate = default_sampling_rate
-        intermediate_freq = min(frequency // 100, default_intermediate_freq)
-        amplitude = default_amplitude
+        try:
+            info = parse_sub(file)
+            frequency = int(info.get('frequency', '418000000'))  # Example frequency in Hz
+            sampling_rate = default_sampling_rate
+            intermediate_freq = min(frequency // 100, default_intermediate_freq)
+            amplitude = default_amplitude
+        except Exception as e:
+            logging.error(f"Error parsing .sub file: {e}")
+            return (default_sampling_rate, default_intermediate_freq, default_amplitude)
 
     elif file_ext == '.wav':
-        with wave.open(file, 'r') as wf:
-            sampling_rate = wf.getframerate()
-        intermediate_freq = min(sampling_rate // 100, default_intermediate_freq)
-        amplitude = default_amplitude
+        try:
+            with wave.open(file, 'r') as wf:
+                sampling_rate = wf.getframerate()
+            intermediate_freq = min(sampling_rate // 100, default_intermediate_freq)
+            amplitude = default_amplitude
+        except Exception as e:
+            logging.error(f"Error reading .wav file: {e}")
+            return (default_sampling_rate, default_intermediate_freq, default_amplitude)
 
     elif file_ext == '.iq' or file_ext == '.bin':
         sampling_rate = default_sampling_rate
@@ -159,10 +169,12 @@ def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
         amplitude = default_amplitude
 
     else:
+        logging.warning(f"Unsupported file format: {file_ext}. Using default parameters.")
         sampling_rate = default_sampling_rate
         intermediate_freq = default_intermediate_freq
         amplitude = default_amplitude
 
+    logging.info(f"Detected parameters - Sampling Rate: {sampling_rate}, Intermediate Frequency: {intermediate_freq}, Amplitude: {amplitude}")
     return (sampling_rate, intermediate_freq, amplitude)
 
 def parse_args() -> dict:
