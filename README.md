@@ -91,17 +91,12 @@ After you run the command, the script creates two new files:
 
 ##### output_file.txt: This file has extra information like the sample rate and frequency.
 
-## Important Notes
-
-Folder Names with Spaces:
-
-Ensure that folder names with spaces are enclosed in quotes ("input folder").
 
 ## Default Output:
 
 If the output folder is not specified, the converted files will be saved in the same location as the input files with the default naming convention.
 
-### Example Commands
+## Example Commands
 Here's an example of how to run the script:
 
 Single File with Automatic Detection:
@@ -126,7 +121,7 @@ python sdr_converter.py "input_file.sub" -o "output_file" -sr 500000
 
 Ensure that file names with spaces are enclosed in quotes ("input folder").
 
-### Extra Info
+## Extra Info
 
 Sample Rate: This tells how many samples per second are used.
 
@@ -136,8 +131,6 @@ Amplitude: This tells how strong the signal is.
 
 Remove any comments from the top of the .sub files, such as "# generated with ook_to_sub.py", it will not see the protocol. Can handle large .sub files such as [CVS Chaos](https://github.com/jimilinuxguy/customer-assistance-buttons-sdr/blob/main/cvs/flipper_zero/CVS_Chaos.sub#L3C18-L3C28)
 
-### License
-This project is free to use and is licensed under the MIT License.
 
 
 
