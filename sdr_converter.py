@@ -5,6 +5,10 @@ from typing import List, Tuple
 import struct
 import numpy as np
 import wave
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def str2abbr(str_: str = '') -> str:
     return ''.join(word[0] for word in str_.split('_'))
@@ -16,7 +20,7 @@ def parse_sub(file: str) -> dict:
         with open(file, 'r') as f:
             sub_data = f.read()
     except Exception as e:
-        print(f'Cannot read input file: {e}')
+        logging.error(f'Cannot read input file: {e}')
         exit(-1)
 
     sub_chunks = [r.strip() for r in sub_data.split('\n')]
@@ -27,7 +31,7 @@ def parse_sub(file: str) -> dict:
             info[k.lower()] = v.strip()
 
     if info.get('protocol') not in SUPPORTED_PROTOCOLS:
-        print(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
+        logging.error(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
         exit(-1)
 
     info['chunks'] = []
@@ -57,7 +61,7 @@ def parse_wav(file: str) -> dict:
             }
             return info
     except Exception as e:
-        print(f'Cannot read WAV file: {e}')
+        logging.error(f'Cannot read WAV file: {e}')
         exit(-1)
 
 def parse_iq(file: str) -> dict:
@@ -69,7 +73,7 @@ def parse_iq(file: str) -> dict:
             }
             return info
     except Exception as e:
-        print(f'Cannot read IQ file: {e}')
+        logging.error(f'Cannot read IQ file: {e}')
         exit(-1)
 
 def parse_bin(file: str) -> dict:
@@ -81,15 +85,19 @@ def parse_bin(file: str) -> dict:
             }
             return info
     except Exception as e:
-        print(f'Cannot read BIN file: {e}')
+        logging.error(f'Cannot read BIN file: {e}')
         exit(-1)
 
 def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
     paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
-    with open(paths[0], 'wb') as f:
-        f.write(buffer)
-    with open(paths[1], 'w') as f:
-        f.write(generate_meta_string(frequency, sampling_rate))
+    try:
+        with open(paths[0], 'wb') as f:
+            f.write(buffer)
+        with open(paths[1], 'w') as f:
+            f.write(generate_meta_string(frequency, sampling_rate))
+    except Exception as e:
+        logging.error(f'Cannot write output file: {e}')
+        exit(-1)
     return paths
 
 def generate_meta_string(frequency: str, sampling_rate: str) -> str:
@@ -125,10 +133,37 @@ def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
     return np.array(sequence).astype(np.int16).tobytes()
 
 def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
-    # Placeholder function for automatic parameter detection
-    # This should analyze the file and return sensible defaults for sampling_rate, intermediate_freq, and amplitude
-    # For now, we'll use fixed values
-    return (500000, 5000, 100)
+    file_ext = os.path.splitext(file)[1].lower()
+    
+    # Default values
+    default_sampling_rate = 500000
+    default_intermediate_freq = 5000
+    default_amplitude = 100
+
+    if file_ext == '.sub':
+        info = parse_sub(file)
+        frequency = int(info.get('frequency', '418000000'))  # Example frequency in Hz
+        sampling_rate = default_sampling_rate
+        intermediate_freq = min(frequency // 100, default_intermediate_freq)
+        amplitude = default_amplitude
+
+    elif file_ext == '.wav':
+        with wave.open(file, 'r') as wf:
+            sampling_rate = wf.getframerate()
+        intermediate_freq = min(sampling_rate // 100, default_intermediate_freq)
+        amplitude = default_amplitude
+
+    elif file_ext == '.iq' or file_ext == '.bin':
+        sampling_rate = default_sampling_rate
+        intermediate_freq = default_intermediate_freq
+        amplitude = default_amplitude
+
+    else:
+        sampling_rate = default_sampling_rate
+        intermediate_freq = default_intermediate_freq
+        amplitude = default_amplitude
+
+    return (sampling_rate, intermediate_freq, amplitude)
 
 def parse_args() -> dict:
     parser = argparse.ArgumentParser(description="SDR-based file processing script")
@@ -143,7 +178,7 @@ def parse_args() -> dict:
 
 def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: int, amplitude: int, verbose: bool):
     if verbose:
-        print(f'Parsing file: {file}')
+        logging.info(f'Parsing file: {file}')
     
     file_ext = os.path.splitext(file)[1].lower()
     if file_ext == '.sub':
@@ -155,23 +190,23 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
     elif file_ext == '.bin':
         info = parse_bin(file)
     else:
-        print(f'Unsupported file format: {file_ext}')
+        logging.error(f'Unsupported file format: {file_ext}')
         exit(-1)
 
     if verbose:
-        print(f'File information: {info}')
+        logging.info(f'File information: {info}')
 
     chunks = [item for sublist in info.get('chunks', []) for item in sublist]  # Flatten the list of chunks
 
     if verbose:
-        print(f'Found {len(chunks)} pure data chunks')
+        logging.info(f'Found {len(chunks)} pure data chunks')
 
     IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
     buff = sequence_to_16le_buffer(IQSequence)
     outFiles = write_hrf_file(output, buff, info.get('frequency', 'unknown'), sampling_rate)
 
     if verbose:
-        print(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
+        logging.info(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
 
 def main():
     args = parse_args()
