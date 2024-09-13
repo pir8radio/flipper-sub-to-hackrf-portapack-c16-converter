@@ -2,7 +2,6 @@ import os
 import argparse
 import math
 from typing import List, Tuple
-import struct
 import numpy as np
 import wave
 import logging
@@ -15,36 +14,50 @@ SUPPORTED_PROTOCOLS = ['RAW', 'BinRAW']
 def parse_sub(file: str) -> dict:
     try:
         with open(file, 'r') as f:
-            sub_data = f.read()
+            lines = f.readlines()
     except Exception as e:
         logging.error(f'Cannot read input file: {e}')
         exit(-1)
 
-    sub_chunks = [r.strip() for r in sub_data.split('\n') if r.strip()]
     info = {}
-    data_start_line = 0
-    for idx, row in enumerate(sub_chunks):
-        if ':' in row:
-            k, v = row.split(':', 1)
+    data_started = False
+    data_lines = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith('RAW_Data:'):
+            data_started = True
+            data_lines.append(line[len('RAW_Data:'):].strip())
+        elif data_started:
+            # All lines after RAW_Data: are considered data lines
+            data_lines.append(line)
+        elif ':' in line:
+            k, v = line.split(':', 1)
             info[k.lower()] = v.strip()
         else:
-            data_start_line = idx
-            break  # Header ends, data starts
+            # Ignore any other lines before data starts
+            continue
 
     if info.get('protocol') not in SUPPORTED_PROTOCOLS:
         logging.error(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
         exit(-1)
 
+    # Now parse the data lines
     info['chunks'] = []
-    for r in sub_chunks[data_start_line:]:
-        if not r.strip():
-            continue  # Skip empty lines
+    for line in data_lines:
+        if not line:
+            continue
         chunk = []
-        for value in r.strip().split():
+        for value in line.strip().split():
             try:
                 chunk.append(int(value, 10))  # Try to parse as decimal
             except ValueError:
-                chunk.append(int(value, 16))  # If decimal parsing fails, parse as hexadecimal
+                try:
+                    chunk.append(int(value, 16))  # Try to parse as hexadecimal
+                except ValueError:
+                    logging.error(f"Invalid value in data: {value}")
+                    exit(-1)
         info['chunks'].append(chunk)
 
     return info
@@ -146,7 +159,7 @@ def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
     if file_ext == '.sub':
         try:
             info = parse_sub(file)
-            frequency = int(info.get('frequency', '418000000'))  # Example frequency in Hz
+            frequency = int(info.get('frequency', '418000000'))  # Use default if not present
             sampling_rate = default_sampling_rate
             intermediate_freq = min(frequency // 100, default_intermediate_freq)
             amplitude = default_amplitude
@@ -219,7 +232,8 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
     outFiles = write_hrf_file(output, buff, info.get('frequency', 'unknown'), sampling_rate)
 
     if verbose:
-        logging.info(f'Written {round(len(buff) / 1024)} kiB, {len(IQSequence) / sampling_rate} seconds in files {", ".join(outFiles)}')
+        duration_seconds = len(IQSequence) / sampling_rate
+        logging.info(f'Written {round(len(buff) / 1024)} kiB, {duration_seconds:.2f} seconds in files {", ".join(outFiles)}')
 
 def main():
     args = parse_args()
@@ -240,11 +254,13 @@ def main():
         amplitude = amplitude or 100
 
     current_dir = os.getcwd()
-    file = os.path.join(current_dir, file)
+    file = os.path.abspath(file)
     if output:
-        output = os.path.join(current_dir, output)
+        output = os.path.abspath(output)
 
     if os.path.isdir(file):
+        if not output:
+            output = file
         sub_files = [f for f in os.listdir(file) if f.endswith(('.sub', '.wav', '.iq', '.bin'))]
         total_files = len(sub_files)
         if not os.path.exists(output):
