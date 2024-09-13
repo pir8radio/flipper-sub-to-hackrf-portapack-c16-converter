@@ -10,9 +10,6 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def str2abbr(str_: str = '') -> str:
-    return ''.join(word[0] for word in str_.split('_'))
-
 SUPPORTED_PROTOCOLS = ['RAW', 'BinRAW']
 
 def parse_sub(file: str) -> dict:
@@ -23,28 +20,32 @@ def parse_sub(file: str) -> dict:
         logging.error(f'Cannot read input file: {e}')
         exit(-1)
 
-    sub_chunks = [r.strip() for r in sub_data.split('\n')]
+    sub_chunks = [r.strip() for r in sub_data.split('\n') if r.strip()]
     info = {}
-    for row in sub_chunks[:5]:
+    data_start_line = 0
+    for idx, row in enumerate(sub_chunks):
         if ':' in row:
             k, v = row.split(':', 1)
             info[k.lower()] = v.strip()
+        else:
+            data_start_line = idx
+            break  # Header ends, data starts
 
     if info.get('protocol') not in SUPPORTED_PROTOCOLS:
         logging.error(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
         exit(-1)
 
     info['chunks'] = []
-    for r in sub_chunks[5:]:
-        if ':' in r:
-            _, values = r.split(':', 1)
-            chunk = []
-            for value in values.split():
-                try:
-                    chunk.append(int(value, 10))  # Try to parse as decimal
-                except ValueError:
-                    chunk.append(int(value, 16))  # If decimal parsing fails, parse as hexadecimal
-            info['chunks'].append(chunk)
+    for r in sub_chunks[data_start_line:]:
+        if not r.strip():
+            continue  # Skip empty lines
+        chunk = []
+        for value in r.strip().split():
+            try:
+                chunk.append(int(value, 10))  # Try to parse as decimal
+            except ValueError:
+                chunk.append(int(value, 16))  # If decimal parsing fails, parse as hexadecimal
+        info['chunks'].append(chunk)
 
     return info
 
