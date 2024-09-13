@@ -118,12 +118,11 @@ def generate_meta_string(frequency: str, sampling_rate: str) -> str:
     meta = [['sample_rate', sampling_rate], ['center_frequency', frequency]]
     return '\n'.join('='.join(map(str, r)) for r in meta)
 
-HACKRF_OFFSET = 0
-
 def durations_to_bin_sequence(durations: List[int], sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
     sequence = []
     for duration in durations:
-        sequence.extend(us_to_sin(duration > 0, abs(duration), sampling_rate, intermediate_freq, amplitude))
+        samples = us_to_sin(duration > 0, abs(duration), sampling_rate, intermediate_freq, amplitude)
+        sequence.extend(samples)
     return sequence
 
 def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
@@ -132,19 +131,22 @@ def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq:
         return []
 
     data_step_per_sample = 2 * math.pi * intermediate_freq / sampling_rate
-    hackrf_amplitude = (256 ** 2 - 1) * (amplitude / 100)
+    max_amplitude = int(32767 * (amplitude / 100))
 
-    return [
-        (
-            HACKRF_OFFSET + int(math.floor(math.cos(i * data_step_per_sample) * (hackrf_amplitude / 2))),
-            HACKRF_OFFSET + int(math.floor(math.sin(i * data_step_per_sample) * (hackrf_amplitude / 2)))
-        )
-        if level else (HACKRF_OFFSET, HACKRF_OFFSET)
-        for i in range(iterations)
-    ]
+    if level:
+        return [
+            (
+                int(math.cos(i * data_step_per_sample) * max_amplitude),
+                int(math.sin(i * data_step_per_sample) * max_amplitude)
+            )
+            for i in range(iterations)
+        ]
+    else:
+        # When the signal is low, output zeros (transmitter off)
+        return [(0, 0)] * iterations
 
 def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
-    return np.array(sequence).astype(np.int16).tobytes()
+    return np.array(sequence, dtype=np.int16).flatten().tobytes()
 
 def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
     file_ext = os.path.splitext(file)[1].lower()
@@ -228,6 +230,15 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
         logging.info(f'Found {len(chunks)} pure data chunks')
 
     IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
+
+    if verbose:
+        min_i = min(sample[0] for sample in IQSequence)
+        max_i = max(sample[0] for sample in IQSequence)
+        min_q = min(sample[1] for sample in IQSequence)
+        max_q = max(sample[1] for sample in IQSequence)
+        logging.info(f'Min I: {min_i}, Max I: {max_i}')
+        logging.info(f'Min Q: {min_q}, Max Q: {max_q}')
+
     buff = sequence_to_16le_buffer(IQSequence)
     outFiles = write_hrf_file(output, buff, info.get('frequency', 'unknown'), sampling_rate)
 
@@ -253,7 +264,6 @@ def main():
         intermediate_freq = intermediate_freq or sampling_rate // 100
         amplitude = amplitude or 100
 
-    current_dir = os.getcwd()
     file = os.path.abspath(file)
     if output:
         output = os.path.abspath(output)
