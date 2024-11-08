@@ -127,7 +127,7 @@ def durations_to_bin_sequence(durations: List[int], sampling_rate: int, intermed
 
 def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
     iterations = int(sampling_rate * duration / 1_000_000)
-    if iterations == 0:
+    if iterations <= 0:
         return []
 
     data_step_per_sample = 2 * math.pi * intermediate_freq / sampling_rate
@@ -224,7 +224,8 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
     if verbose:
         logging.info(f'File information: {info}')
 
-    chunks = [item for sublist in info.get('chunks', []) for item in sublist]  # Flatten the list of chunks
+    # Flatten the list of chunks
+    chunks = [item for sublist in info.get('chunks', []) for item in sublist]
 
     if verbose:
         logging.info(f'Found {len(chunks)} pure data chunks')
