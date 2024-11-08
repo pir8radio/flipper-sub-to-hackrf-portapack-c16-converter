@@ -17,7 +17,7 @@ def parse_sub(file: str) -> dict:
             lines = f.readlines()
     except Exception as e:
         logging.error(f'Cannot read input file: {e}')
-        exit(-1)
+        return None  # Return None on error
 
     info = {}
     data_started = False
@@ -41,7 +41,7 @@ def parse_sub(file: str) -> dict:
 
     if info.get('protocol') not in SUPPORTED_PROTOCOLS:
         logging.error(f'Failed to parse {file}: Supported protocols are {", ".join(SUPPORTED_PROTOCOLS)} (found: {info.get("protocol")})')
-        exit(-1)
+        return None  # Return None for unsupported protocols
 
     # Now parse the data lines
     info['chunks'] = []
@@ -57,7 +57,7 @@ def parse_sub(file: str) -> dict:
                     chunk.append(int(value, 16))  # Try to parse as hexadecimal
                 except ValueError:
                     logging.error(f"Invalid value in data: {value}")
-                    exit(-1)
+                    return None  # Return None on invalid value
         info['chunks'].append(chunk)
 
     return info
@@ -76,7 +76,7 @@ def parse_wav(file: str) -> dict:
             return info
     except Exception as e:
         logging.error(f'Cannot read WAV file: {e}')
-        exit(-1)
+        return None  # Return None on error
 
 def parse_iq(file: str) -> dict:
     try:
@@ -88,7 +88,7 @@ def parse_iq(file: str) -> dict:
             return info
     except Exception as e:
         logging.error(f'Cannot read IQ file: {e}')
-        exit(-1)
+        return None  # Return None on error
 
 def parse_bin(file: str) -> dict:
     try:
@@ -100,7 +100,7 @@ def parse_bin(file: str) -> dict:
             return info
     except Exception as e:
         logging.error(f'Cannot read BIN file: {e}')
-        exit(-1)
+        return None  # Return None on error
 
 def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
     paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
@@ -111,7 +111,7 @@ def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str)
             f.write(generate_meta_string(frequency, sampling_rate))
     except Exception as e:
         logging.error(f'Cannot write output file: {e}')
-        exit(-1)
+        return []  # Return an empty list on error
     return paths
 
 def generate_meta_string(frequency: str, sampling_rate: str) -> str:
@@ -161,6 +161,8 @@ def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
     if file_ext == '.sub':
         try:
             info = parse_sub(file)
+            if info is None:
+                return (default_sampling_rate, default_intermediate_freq, default_amplitude)
             frequency = int(info.get('frequency', '418000000'))  # Use default if not present
             sampling_rate = default_sampling_rate
             intermediate_freq = min(frequency // 100, default_intermediate_freq)
@@ -219,7 +221,11 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
         info = parse_bin(file)
     else:
         logging.error(f'Unsupported file format: {file_ext}')
-        exit(-1)
+        return  # Return to continue with the next file
+
+    if info is None:
+        logging.error(f'Failed to process file: {file}. Skipping to the next file.')
+        return  # Return to skip unsupported or invalid files
 
     if verbose:
         logging.info(f'File information: {info}')
@@ -272,14 +278,17 @@ def main():
     if os.path.isdir(file):
         if not output:
             output = file
-        sub_files = [f for f in os.listdir(file) if f.endswith(('.sub', '.wav', '.iq', '.bin'))]
-        total_files = len(sub_files)
-        if not os.path.exists(output):
-            os.makedirs(output)
-        for sub_file in sub_files:
-            input_path = os.path.join(file, sub_file)
-            output_path = os.path.join(output, os.path.splitext(sub_file)[0])
-            process_file(input_path, output_path, sampling_rate, intermediate_freq, amplitude, verbose)
+        for root, _, files in os.walk(file):
+            for sub_file in files:
+                if sub_file.endswith(('.sub', '.wav', '.iq', '.bin')):
+                    input_path = os.path.join(root, sub_file)
+                    # Maintain the folder structure
+                    relative_path = os.path.relpath(input_path, file)
+                    output_path = os.path.join(output, relative_path)
+                    output_dir = os.path.dirname(output_path)
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                    process_file(input_path, output_path, sampling_rate, intermediate_freq, amplitude, verbose)
     else:
         if output is None:
             output = os.path.splitext(file)[0]
