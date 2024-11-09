@@ -13,20 +13,10 @@ Made by RockGod, trying to be fixed by "me" (gpt 4O). This project contains a Py
 
 If you don't have Python, you can download and install it from [python.org](https://www.python.org/).
 
-### 2. Install NumPy
-
-Open a command prompt or terminal on your computer and type the following:
-
-```sh
-pip install numpy
-```
-This command installs NumPy for Python.
 
 ### How to Use the Script
 
 Get Your Files Ready
-
-Make sure you have files in one of the supported formats: .sub, .wav, .iq, or .bin. These are the files you want to convert.
 
 ### How To Run the Script
 Open the command prompt or terminal on your computer.
@@ -39,50 +29,21 @@ cd C:\Users\YourName\Documents
 Now, run the script with the following command:
 
 ```sh
-python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
+python sdr_converter.py "input_file.sub" -o "output_file"
 ```
 ## Important Parameters
 
-### Automatic Parameter Detection:
 
-Use the --auto flag to automatically detect and suggest appropriate parameters.
-
-Example:
-```sh
-python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
-```
-### Manual Parameters:
-
-Sample Rate (-sr): Sets the sample rate to a specific value.
-```sh
-python sdr_converter.py "input_file.sub" -o "output_file" -sr 500000
-```
-Intermediate Frequency (-if): Sets the intermediate frequency.
-```sh
-python sdr_converter.py "input_file.sub" -o "output_file" -if 5000
-```
-
-Amplitude (-a): Sets the amplitude percentage.
-```sh
-python sdr_converter.py "input_file.sub" -o "output_file" -a 100
-```
 
 ## What the Commands Do
 python sdr_converter.py runs the script.
 
-your_signal.sub is the name of the file you want to convert.
+input_folder_name is the name of the folder of subfolders and files you want to convert.
 
 -o output_file tells the script to save the new files with the name output_file.
 
--sr 500000 sets the sample rate to 500,000 samples per second.
-
--if 5000 sets the intermediate frequency to 5000 Hz.
-
--a 100 sets the amplitude to 100%.
-
 -v enables verbose mode, which means the script will tell you what it's doing step by step.
 
---auto enables automatic parameter detection
 
 ### Check the New Files
 After you run the command, the script creates two new files:
@@ -102,19 +63,7 @@ Here's an example of how to run the script:
 Single File with Automatic Detection:
 
 ```sh
-python sdr_converter.py "input_file.sub" -o "output_file" --auto -v
-```
-
-Folder of Files with Automatic Detection:
-
-```sh
-python sdr_converter.py "input_folder" -o "output_folder" --auto -v
-```
-
-Single File with Manual Parameters:
-
-```sh
-python sdr_converter.py "input_file.sub" -o "output_file" -sr 500000 
+python sdr_converter.py "input_folder" -o "output_folder"
 ```
 
 #### File Names with Spaces:
