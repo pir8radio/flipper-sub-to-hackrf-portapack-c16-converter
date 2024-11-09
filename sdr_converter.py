@@ -1,13 +1,12 @@
 import sys
 import logging
 import subprocess
-import threading
 
 # Configure logging
 logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # List of required packages
-REQUIRED_PACKAGES = ['numpy', 'tqdm', 'psutil']
+REQUIRED_PACKAGES = ['numpy', 'alive-progress', 'psutil']
 
 def install_packages():
     """Install required packages using pip."""
@@ -21,17 +20,20 @@ def install_packages():
 # Check and install required packages
 install_packages()
 
+import threading
 import os
 import argparse
 import math
 import shutil
 import numpy as np
-from tqdm import tqdm
+from alive_progress import alive_bar
 import psutil
 import gc
+import time
+
 
 print("\n\n\n\n\n\n") 
-logging.critical("Some conversions will take a long time and apear to freeze, Let it run. To quit hit CTL+c and wait some more... ")
+print("Some conversions will take a long time and appear to freeze. Let it run. To quit hit CTRL+C and wait some more... ")
 print("\n\n\n") 
 
 # Updated supported protocols
@@ -321,17 +323,21 @@ def main():
                 sub_files.append(os.path.join(root, sub_file))
 
     # Process each file with a progress bar
-    for input_path in tqdm(sub_files, desc="Processing files", unit="file"):
-        relative_path = os.path.relpath(input_path, input_folder)
-        output_path = os.path.join(output_folder, os.path.splitext(relative_path)[0]) + '.c16'
-        output_dir = os.path.dirname(output_path)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+    with alive_bar(len(sub_files), title="Processing files") as bar:
+        for input_path in sub_files:
+            relative_path = os.path.relpath(input_path, input_folder)
+            output_path = os.path.join(output_folder, os.path.splitext(relative_path)[0]) + '.c16'
+            output_dir = os.path.dirname(output_path)
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
 
-        # Process with a timeout for each individual file
-        result = process_with_timeout(process_file, (input_path, output_path, args.verbose), 60)
-        if result is None:
-            logging.warning(f'Skipped processing of {input_path} due to timeout.')
+            # Process with a timeout for each individual file
+            result = process_with_timeout(process_file, (input_path, output_path, args.verbose), 60)
+            if result is None:
+                logging.warning(f'Skipped processing of {input_path} due to timeout.')
+
+            # Update the progress bar
+            bar()
 
     # Remove empty folders in the output directory
     remove_empty_folders(output_folder)
