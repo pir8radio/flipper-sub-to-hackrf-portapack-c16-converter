@@ -299,7 +299,7 @@ def remove_empty_folders(folder: str):
         for dirname in dirnames:
             dir_to_check = os.path.join(dirpath, dirname)
             if not os.listdir(dir_to_check):  # Check if the directory is empty
-                logging.info(f'Removing empty directory: {dir_to_check}')
+                print(f'Removing empty directory: {dir_to_check}')
                 os.rmdir(dir_to_check)
 
 def main():
