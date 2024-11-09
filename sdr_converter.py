@@ -1,10 +1,9 @@
 import os
 import argparse
 import math
-from typing import List, Tuple
 import numpy as np
-import wave
 import logging
+import wave
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -62,70 +61,14 @@ def parse_sub(file: str) -> dict:
 
     return info
 
-def parse_wav(file: str) -> dict:
-    try:
-        with wave.open(file, 'r') as wf:
-            params = wf.getparams()
-            framerate = params.framerate
-            nframes = params.nframes
-            audio_data = wf.readframes(nframes)
-            info = {
-                'sampling_rate': framerate,
-                'chunks': np.frombuffer(audio_data, dtype=np.int16).tolist()
-            }
-            return info
-    except Exception as e:
-        logging.error(f'Cannot read WAV file: {e}')
-        return None  # Return None on error
-
-def parse_iq(file: str) -> dict:
-    try:
-        with open(file, 'rb') as f:
-            iq_data = f.read()
-            info = {
-                'chunks': np.frombuffer(iq_data, dtype=np.int16).tolist()
-            }
-            return info
-    except Exception as e:
-        logging.error(f'Cannot read IQ file: {e}')
-        return None  # Return None on error
-
-def parse_bin(file: str) -> dict:
-    try:
-        with open(file, 'rb') as f:
-            bin_data = f.read()
-            info = {
-                'chunks': np.frombuffer(bin_data, dtype=np.uint8).tolist()
-            }
-            return info
-    except Exception as e:
-        logging.error(f'Cannot read BIN file: {e}')
-        return None  # Return None on error
-
-def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> List[str]:
-    paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
-    try:
-        with open(paths[0], 'wb') as f:
-            f.write(buffer)
-        with open(paths[1], 'w') as f:
-            f.write(generate_meta_string(frequency, sampling_rate))
-    except Exception as e:
-        logging.error(f'Cannot write output file: {e}')
-        return []  # Return an empty list on error
-    return paths
-
-def generate_meta_string(frequency: str, sampling_rate: str) -> str:
-    meta = [['sample_rate', sampling_rate], ['center_frequency', frequency]]
-    return '\n'.join('='.join(map(str, r)) for r in meta)
-
-def durations_to_bin_sequence(durations: List[int], sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
+def durations_to_bin_sequence(durations: list, sampling_rate: int, intermediate_freq: int, amplitude: int) -> list:
     sequence = []
     for duration in durations:
         samples = us_to_sin(duration > 0, abs(duration), sampling_rate, intermediate_freq, amplitude)
         sequence.extend(samples)
     return sequence
 
-def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> List[Tuple[int, int]]:
+def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq: int, amplitude: int) -> list:
     iterations = int(sampling_rate * duration / 1_000_000)
     if iterations <= 0:
         return []
@@ -145,84 +88,30 @@ def us_to_sin(level: bool, duration: int, sampling_rate: int, intermediate_freq:
         # When the signal is low, output zeros (transmitter off)
         return [(0, 0)] * iterations
 
-def sequence_to_16le_buffer(sequence: List[Tuple[int, int]]) -> bytes:
+def sequence_to_16le_buffer(sequence: list) -> bytes:
     return np.array(sequence, dtype=np.int16).flatten().tobytes()
 
-def auto_detect_parameters(file: str) -> Tuple[int, int, int]:
-    file_ext = os.path.splitext(file)[1].lower()
-    
-    # Default values
-    default_sampling_rate = 500000
-    default_intermediate_freq = 5000
-    default_amplitude = 100
+def write_hrf_file(file: str, buffer: bytes, frequency: str, sampling_rate: str) -> list:
+    paths = [f'{file}.{ext}' for ext in ['c16', 'txt']]
+    try:
+        with open(paths[0], 'wb') as f:
+            f.write(buffer)
+        with open(paths[1], 'w') as f:
+            f.write(generate_meta_string(frequency, sampling_rate))
+    except Exception as e:
+        logging.error(f'Cannot write output file: {e}')
+        return []  # Return an empty list on error
+    return paths
 
-    logging.info(f"Auto-detecting parameters for file: {file}")
-    
-    if file_ext == '.sub':
-        try:
-            info = parse_sub(file)
-            if info is None:
-                return (default_sampling_rate, default_intermediate_freq, default_amplitude)
-            frequency = int(info.get('frequency', '418000000'))  # Use default if not present
-            sampling_rate = default_sampling_rate
-            intermediate_freq = min(frequency // 100, default_intermediate_freq)
-            amplitude = default_amplitude
-        except Exception as e:
-            logging.error(f"Error parsing .sub file: {e}")
-            return (default_sampling_rate, default_intermediate_freq, default_amplitude)
+def generate_meta_string(frequency: str, sampling_rate: str) -> str:
+    meta = [['sample_rate', sampling_rate], ['center_frequency', frequency]]
+    return '\n'.join('='.join(map(str, r)) for r in meta)
 
-    elif file_ext == '.wav':
-        try:
-            with wave.open(file, 'r') as wf:
-                sampling_rate = wf.getframerate()
-            intermediate_freq = min(sampling_rate // 100, default_intermediate_freq)
-            amplitude = default_amplitude
-        except Exception as e:
-            logging.error(f"Error reading .wav file: {e}")
-            return (default_sampling_rate, default_intermediate_freq, default_amplitude)
-
-    elif file_ext == '.iq' or file_ext == '.bin':
-        sampling_rate = default_sampling_rate
-        intermediate_freq = default_intermediate_freq
-        amplitude = default_amplitude
-
-    else:
-        logging.warning(f"Unsupported file format: {file_ext}. Using default parameters.")
-        sampling_rate = default_sampling_rate
-        intermediate_freq = default_intermediate_freq
-        amplitude = default_amplitude
-
-    logging.info(f"Detected parameters - Sampling Rate: {sampling_rate}, Intermediate Frequency: {intermediate_freq}, Amplitude: {amplitude}")
-    return (sampling_rate, intermediate_freq, amplitude)
-
-def parse_args() -> dict:
-    parser = argparse.ArgumentParser(description="SDR-based file processing script")
-    parser.add_argument('file', help="Input file path or folder.")
-    parser.add_argument('-o', '--output', help="Output file or folder path. If not specified, the input file name will be used.")
-    parser.add_argument('-sr', '--sampling_rate', type=int, help="Sampling rate for the output file.")
-    parser.add_argument('-if', '--intermediate_freq', type=int, help="Intermediate frequency.")
-    parser.add_argument('-a', '--amplitude', type=int, help="Amplitude percentage.")
-    parser.add_argument('--auto', action='store_true', help='Automatically detect parameters.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
-    return vars(parser.parse_args())
-
-def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: int, amplitude: int, verbose: bool):
+def process_file(file: str, output: str, verbose: bool):
     if verbose:
         logging.info(f'Parsing file: {file}')
     
-    file_ext = os.path.splitext(file)[1].lower()
-    if file_ext == '.sub':
-        info = parse_sub(file)
-    elif file_ext == '.wav':
-        info = parse_wav(file)
-    elif file_ext == '.iq':
-        info = parse_iq(file)
-    elif file_ext == '.bin':
-        info = parse_bin(file)
-    else:
-        logging.error(f'Unsupported file format: {file_ext}')
-        return  # Return to continue with the next file
-
+    info = parse_sub(file)
     if info is None:
         logging.error(f'Failed to process file: {file}. Skipping to the next file.')
         return  # Return to skip unsupported or invalid files
@@ -236,15 +125,11 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
     if verbose:
         logging.info(f'Found {len(chunks)} pure data chunks')
 
-    IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
+    sampling_rate = 500000  # Example sampling rate (can be adjusted)
+    intermediate_freq = min(int(info.get('frequency', '418000000')) // 100, 5000)  # Example
+    amplitude = 100  # Example amplitude
 
-    if verbose:
-        min_i = min(sample[0] for sample in IQSequence)
-        max_i = max(sample[0] for sample in IQSequence)
-        min_q = min(sample[1] for sample in IQSequence)
-        max_q = max(sample[1] for sample in IQSequence)
-        logging.info(f'Min I: {min_i}, Max I: {max_i}')
-        logging.info(f'Min Q: {min_q}, Max Q: {max_q}')
+    IQSequence = durations_to_bin_sequence(chunks, sampling_rate, intermediate_freq, amplitude)
 
     buff = sequence_to_16le_buffer(IQSequence)
     outFiles = write_hrf_file(output, buff, info.get('frequency', 'unknown'), sampling_rate)
@@ -254,45 +139,29 @@ def process_file(file: str, output: str, sampling_rate: int, intermediate_freq: 
         logging.info(f'Written {round(len(buff) / 1024)} kiB, {duration_seconds:.2f} seconds in files {", ".join(outFiles)}')
 
 def main():
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="Convert Flipper Zero .sub files to HackRF .c16 files.")
+    parser.add_argument('input_folder', help="Input folder to recursively search for .sub files.")
+    parser.add_argument('-o', '--output_folder', help="Output folder to maintain the recursive structure.")
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
+    
+    args = parser.parse_args()
 
-    file = args.get('file')
-    output = args.get('output')
-    sampling_rate = args.get('sampling_rate')
-    intermediate_freq = args.get('intermediate_freq')
-    amplitude = args.get('amplitude')
-    auto = args.get('auto')
-    verbose = args.get('verbose', False)
+    input_folder = os.path.abspath(args.input_folder)
+    output_folder = os.path.abspath(args.output_folder) if args.output_folder else input_folder
 
-    if auto:
-        sampling_rate, intermediate_freq, amplitude = auto_detect_parameters(file)
-    else:
-        sampling_rate = sampling_rate or 500000
-        intermediate_freq = intermediate_freq or sampling_rate // 100
-        amplitude = amplitude or 100
+    for root, _, files in os.walk(input_folder):
+        for sub_file in files:
+            if sub_file.endswith('.sub'):
+                input_path = os.path.join(root, sub_file)
 
-    file = os.path.abspath(file)
-    if output:
-        output = os.path.abspath(output)
-
-    if os.path.isdir(file):
-        if not output:
-            output = file
-        for root, _, files in os.walk(file):
-            for sub_file in files:
-                if sub_file.endswith(('.sub', '.wav', '.iq', '.bin')):
-                    input_path = os.path.join(root, sub_file)
-                    # Maintain the folder structure
-                    relative_path = os.path.relpath(input_path, file)
-                    output_path = os.path.join(output, relative_path)
-                    output_dir = os.path.dirname(output_path)
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    process_file(input_path, output_path, sampling_rate, intermediate_freq, amplitude, verbose)
-    else:
-        if output is None:
-            output = os.path.splitext(file)[0]
-        process_file(file, output, sampling_rate, intermediate_freq, amplitude, verbose)
+                # Maintain the folder structure
+                relative_path = os.path.relpath(input_path, input_folder)
+                output_path = os.path.join(output_folder, os.path.splitext(relative_path)[0]) + '.c16'
+                output_dir = os.path.dirname(output_path)
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                
+                process_file(input_path, output_path, args.verbose)
 
 if __name__ == "__main__":
     main()
